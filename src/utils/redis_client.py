@@ -64,7 +64,7 @@ class RedisClient:
         try:
             conn = self.get_connection()
             if conn:
-                if isinstance(value, (dict, list)):
+                if isinstance(value, dict | list):
                     value = json.dumps(value, ensure_ascii=False)
                 return conn.set(key, value, ex=expire)
         except Exception as e:
@@ -164,7 +164,7 @@ class RedisClient:
         try:
             conn = self.get_connection()
             if conn:
-                if isinstance(value, (dict, list)):
+                if isinstance(value, dict | list):
                     value = json.dumps(value, ensure_ascii=False)
                 return conn.hset(name, key, value) > 0
         except Exception as e:

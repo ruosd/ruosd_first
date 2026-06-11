@@ -153,7 +153,7 @@ class ChromaStoreService:
                 for key, value in metadata.items():
                     if value is None:
                         filtered_metadata[key] = ""  # 将 None 替换为空字符串
-                    elif isinstance(value, (str, int, float, bool)):
+                    elif isinstance(value, str | int | float | bool):
                         filtered_metadata[key] = value
                     else:
                         filtered_metadata[key] = str(value)  # 其他类型转为字符串
