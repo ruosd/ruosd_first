@@ -1,0 +1,117 @@
+
+services:
+  # MySQL数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: ecommerce-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=ecommerce
+      - MYSQL_USER=admin
+      - MYSQL_PASSWORD=password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 后端API服务
+  web:
+    build: .
+    container_name: ecommerce-customer-service
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      # Docker 内部服务发现（覆盖 .env 中的 localhost）
+      - REDIS_HOST=redis
+      - MYSQL_HOST=mysql
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    depends_on:
+      - redis
+      - mysql
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Celery Worker — 异步处理文档上传等耗时任务
+  worker:
+    build: .
+    container_name: ecommerce-worker
+    command: celery -A src.tasks.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    environment:
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+    depends_on:
+      - redis
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+
+  # Vue前端服务
+  frontend-vue:
+    build:
+      context: ./frontend-vue
+      dockerfile: Dockerfile
+    container_name: ecommerce-frontend-vue
+    ports:
+      - "3000:80"
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  ecommerce-network:
+    driver: bridge

@@ -1,0 +1,45 @@
+[project]
+name = "agent-dskf"
+version = "1.0.0"
+description = "多Agent电商客服系统"
+requires-python = ">=3.10"
+
+[tool.ruff]
+# 目标 Python 版本
+target-version = "py310"
+
+# 检查的规则集
+lint.select = [
+    "E",     # pycodestyle errors (语法错误)
+    "W",     # pycodestyle warnings (风格警告)
+    "F",     # pyflakes (未使用的导入/变量)
+    "I",     # isort (导入排序)
+    "B",     # flake8-bugbear (常见 bug 模式)
+    "C4",    # flake8-comprehensions (推导式优化)
+    "UP",    # pyupgrade (新版本语法建议)
+    "SIM",   # flake8-simplify (简化代码建议)
+]
+
+# 忽略的规则（项目特定）
+lint.ignore = [
+    "E501",  # 行太长（由自动换行处理）
+    "B008",  # 不在函数参数中直接实例化（FastAPI Depends 需要）
+]
+
+# 排除的目录
+exclude = [
+    "__pycache__",
+    ".git",
+    "node_modules",
+    "frontend-vue",
+]
+
+[tool.ruff.lint.isort]
+# 导入排序：已知的第三方库放在一起
+known-first-party = ["src"]
+
+[tool.ruff.format]
+# 格式化：与 black 兼容
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
