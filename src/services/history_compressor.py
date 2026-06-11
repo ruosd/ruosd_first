@@ -10,9 +10,8 @@
   compressed = await compress_history(messages, llm)
 """
 
-from typing import List, Dict
-import tiktoken
 
+import tiktoken
 
 # 阈值：超过此 token 数触发压缩
 MAX_HISTORY_TOKENS = 3000
@@ -29,7 +28,7 @@ def count_tokens(text: str) -> int:
         return len(text) // 2  # 粗略估算：中文约 2 字符/token
 
 
-def _messages_to_text(messages: List[Dict[str, str]]) -> str:
+def _messages_to_text(messages: list[dict[str, str]]) -> str:
     """消息列表转文本"""
     lines = []
     for m in messages:
@@ -40,11 +39,11 @@ def _messages_to_text(messages: List[Dict[str, str]]) -> str:
 
 
 async def compress_history(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     llm=None,
     max_tokens: int = MAX_HISTORY_TOKENS,
     keep_recent: int = KEEP_RECENT,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     压缩对话历史
 

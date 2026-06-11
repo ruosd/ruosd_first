@@ -5,8 +5,9 @@ Broker: Redis (复用已有的 Redis 服务)
 结果后端: Redis (任务状态查询)
 """
 
-from celery import Celery
 import os
+
+from celery import Celery
 
 # Redis 连接地址（与 docker-compose 中保持一致）
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")

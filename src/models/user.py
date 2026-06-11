@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+
 
 @dataclass
 class User:
     """用户模型"""
-    id: Optional[int] = None
+    id: int | None = None
     username: str = ""
     email: str = ""
     password_hash: str = ""
@@ -14,13 +14,13 @@ class User:
     phone: str = ""
     avatar: str = ""
     status: str = "active"
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
     def is_admin(self) -> bool:
         """判断是否为管理员"""
         return self.role == "admin"
-    
+
     def is_active(self) -> bool:
         """判断用户是否激活"""
         return self.status == "active"

@@ -1,17 +1,17 @@
-from fastapi import APIRouter, HTTPException, Query, Request, Header
-from starlette.responses import StreamingResponse
-from typing import Optional, Dict, List
-from pydantic import BaseModel, Field
-from datetime import datetime
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-import jwt
+import contextlib
 import time
 
+import jwt
+from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from starlette.responses import StreamingResponse
+
+from ..graph.graph_coordinator import GraphCoordinator
+from ..models.conversation import ChatResponse
 from ..services.conversation_service import ConversationService
 from ..services.history_compressor import compress_history
-from ..graph.graph_coordinator import GraphCoordinator
-from ..models.conversation import ChatRequest, ChatResponse
 from ..utils.logger import get_logger
 from ..utils.settings import settings
 
@@ -65,7 +65,7 @@ def _get_llm():
     return _llm
 
 
-def _extract_user_id(authorization: Optional[str] = None) -> Optional[str]:
+def _extract_user_id(authorization: str | None = None) -> str | None:
     """从 Authorization Header 中提取用户ID（多租户隔离的核心）"""
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -78,7 +78,7 @@ def _extract_user_id(authorization: Optional[str] = None) -> Optional[str]:
 
 class CreateConversationRequest(BaseModel):
     """创建会话请求"""
-    user_id: Optional[str] = Field(None, max_length=64, description="用户ID")
+    user_id: str | None = Field(None, max_length=64, description="用户ID")
 
 class CreateConversationResponse(BaseModel):
     """创建会话响应"""
@@ -89,22 +89,22 @@ class SendMessageRequest(BaseModel):
     """发送消息请求"""
     session_id: str = Field(..., min_length=8, max_length=128, description="会话ID")
     message: str = Field(..., min_length=1, max_length=2000, description="用户消息（最长2000字符）")
-    current_agent: Optional[str] = Field(None, max_length=64, description="当前活跃的Agent名称")
+    current_agent: str | None = Field(None, max_length=64, description="当前活跃的Agent名称")
 
 class ConversationHistoryResponse(BaseModel):
     """对话历史响应"""
     session_id: str = Field(..., description="会话ID")
-    history: List[Dict] = Field(..., description="对话历史")
+    history: list[dict] = Field(..., description="对话历史")
     message_count: int = Field(..., description="消息数量")
 
 @router.post("/conversation", response_model=CreateConversationResponse)
 async def create_conversation(
-    request: Optional[CreateConversationRequest] = None,
-    authorization: Optional[str] = Header(None)
+    request: CreateConversationRequest | None = None,
+    authorization: str | None = Header(None)
 ):
     """创建新的对话会话，自动从 JWT 令牌提取用户身份"""
     start_time = time.time()
-    logger.info(f"========== 创建会话请求 ==========")
+    logger.info("========== 创建会话请求 ==========")
 
     try:
         # 优先使用请求中的 user_id，其次从 JWT 令牌提取
@@ -114,14 +114,14 @@ async def create_conversation(
             if token_user:
                 user_id = token_user
         logger.info(f"用户ID: {user_id if user_id else '未提供'}（会话将按此ID隔离记忆数据）")
-        
+
         logger.info("开始创建会话...")
         session_id = await conversation_service.create_conversation(user_id)
-        
+
         latency = (time.time() - start_time) * 1000
         logger.info(f"会话创建成功，Session ID: {session_id}，耗时: {latency:.2f}ms")
-        logger.info(f"========== 创建会话完成 ==========\n")
-        
+        logger.info("========== 创建会话完成 ==========\n")
+
         return CreateConversationResponse(
             session_id=session_id,
             message="会话创建成功"
@@ -129,21 +129,21 @@ async def create_conversation(
     except Exception as e:
         latency = (time.time() - start_time) * 1000
         logger.error(f"创建会话失败，耗时: {latency:.2f}ms，错误: {str(e)}", exc_info=True)
-        logger.info(f"========== 创建会话失败 ==========\n")
-        raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
+        logger.info("========== 创建会话失败 ==========\n")
+        raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}") from e
 
 @router.post("/message", response_model=ChatResponse)
 @limiter.limit("30/minute")
-async def send_message(request: Request, body: SendMessageRequest, authorization: Optional[str] = Header(None)):
+async def send_message(request: Request, body: SendMessageRequest, authorization: str | None = Header(None)):
     """发送消息并获取AI回复（自动按用户隔离记忆）"""
     start_time = time.time()
-    logger.info(f"========== 发送消息请求 ==========")
-    
+    logger.info("========== 发送消息请求 ==========")
+
     try:
         logger.info(f"Session ID: {body.session_id}")
         logger.info(f"用户消息: {body.message[:50]}..." if len(body.message) > 50 else f"用户消息: {body.message}")
         logger.info(f"当前Agent: {body.current_agent if body.current_agent else '无'}")
-        
+
         # 获取对话历史
         logger.info("步骤1: 获取对话历史...")
         history_start = time.time()
@@ -156,12 +156,12 @@ async def send_message(request: Request, body: SendMessageRequest, authorization
         history = await compress_history(history, _get_llm())
         if len(history) != original_count:
             logger.info(f"对话历史已压缩: {original_count} → {len(history)} 条消息")
-        
+
         # 获取用户ID（从会话中，或从 JWT 令牌提取）
         user_id = await conversation_service.get_user_id(body.session_id)
         if not user_id:
             user_id = _extract_user_id(authorization)
-        
+
         # 路由查询到合适的Agent
         logger.info("步骤2: 路由查询到合适的Agent...")
         route_start = time.time()
@@ -174,7 +174,7 @@ async def send_message(request: Request, body: SendMessageRequest, authorization
         )
         route_time = (time.time() - route_start) * 1000
         logger.info(f"路由查询完成，选择Agent: {result['agent']}，耗时: {route_time:.2f}ms")
-        
+
         # 保存用户消息
         logger.info("步骤3: 保存用户消息...")
         save_start = time.time()
@@ -185,7 +185,7 @@ async def send_message(request: Request, body: SendMessageRequest, authorization
         )
         save_time = (time.time() - save_start) * 1000
         logger.info(f"用户消息保存完成，耗时: {save_time:.2f}ms")
-        
+
         # 保存AI回复
         logger.info("步骤4: 保存AI回复...")
         await conversation_service.add_message(
@@ -194,12 +194,12 @@ async def send_message(request: Request, body: SendMessageRequest, authorization
             content=result["response"],
             agent_name=result["agent"]
         )
-        logger.info(f"AI回复保存完成")
-        
+        logger.info("AI回复保存完成")
+
         total_time = (time.time() - start_time) * 1000
         logger.info(f"消息处理完成，总耗时: {total_time:.2f}ms")
-        logger.info(f"========== 发送消息完成 ==========\n")
-        
+        logger.info("========== 发送消息完成 ==========\n")
+
         return ChatResponse(
             response=result["response"],
             agent=result["agent"],
@@ -208,44 +208,40 @@ async def send_message(request: Request, body: SendMessageRequest, authorization
     except Exception as e:
         total_time = (time.time() - start_time) * 1000
         logger.error(f"消息处理失败，耗时: {total_time:.2f}ms，错误: {str(e)}", exc_info=True)
-        logger.info(f"========== 发送消息失败 ==========\n")
-        raise HTTPException(status_code=500, detail=f"处理消息失败: {str(e)}")
+        logger.info("========== 发送消息失败 ==========\n")
+        raise HTTPException(status_code=500, detail=f"处理消息失败: {str(e)}") from e
 
 # 流式响应端点
-from fastapi import Response
-from typing import AsyncGenerator
-import asyncio
-import json
 
 @router.post("/message/stream")
 @limiter.limit("30/minute")
-async def send_message_stream(request: Request, body: SendMessageRequest, authorization: Optional[str] = Header(None)):
+async def send_message_stream(request: Request, body: SendMessageRequest, authorization: str | None = Header(None)):
     """
     发送消息并获取流式AI回复（改善延迟体验）
-    
+
     - **session_id**: 会话ID
     - **message**: 用户消息内容
     - **current_agent**: 当前活跃的Agent名称（可选）
     - 返回流式AI回复
     """
     start_time = time.time()
-    logger.info(f"========== 发送消息请求(流式) ==========")
-    
+    logger.info("========== 发送消息请求(流式) ==========")
+
     try:
         logger.info(f"Session ID: {body.session_id}")
         logger.info(f"用户消息: {body.message[:50]}..." if len(body.message) > 50 else f"用户消息: {body.message}")
         logger.info(f"当前Agent: {body.current_agent if body.current_agent else '无'}")
-        
+
         # 获取对话历史
         logger.info("步骤1: 获取对话历史...")
         history = await conversation_service.get_conversation_history(body.session_id)
         logger.info(f"对话历史获取完成，消息数量: {len(history)}")
-        
+
         # 获取用户ID（从会话中，或从 JWT 令牌提取）
         user_id = await conversation_service.get_user_id(body.session_id)
         if not user_id:
             user_id = _extract_user_id(authorization)
-        
+
         # 保存用户消息
         await conversation_service.add_message(
             session_id=body.session_id, role="user", content=body.message
@@ -286,13 +282,11 @@ async def send_message_stream(request: Request, body: SendMessageRequest, author
                     parts = chunk.split("|")
                     agent_name = parts[1] if len(parts) > 1 else agent_name
                     if full_response:
-                        try:
+                        with contextlib.suppress(Exception):
                             await conversation_service.add_message(
                                 session_id=body.session_id,
                                 role="assistant", content=full_response, agent_name=agent_name,
                             )
-                        except Exception:
-                            pass
                     yield f"data: [END]|{agent_name}|{body.session_id}\n\n"
                     logger.info(f"流式完成: {len(full_response)} 字符")
                 else:
@@ -300,18 +294,18 @@ async def send_message_stream(request: Request, body: SendMessageRequest, author
                     yield f"data: {chunk}\n\n"
 
         return StreamingResponse(generate(), media_type="text/event-stream")
-    
+
     except Exception as e:
         total_time = (time.time() - start_time) * 1000
         logger.error(f"消息处理失败(流式)，耗时: {total_time:.2f}ms，错误: {str(e)}", exc_info=True)
-        logger.info(f"========== 发送消息(流式)失败 ==========\n")
-        raise HTTPException(status_code=500, detail=f"处理消息失败: {str(e)}")
+        logger.info("========== 发送消息(流式)失败 ==========\n")
+        raise HTTPException(status_code=500, detail=f"处理消息失败: {str(e)}") from e
 
 @router.get("/history/{session_id}", response_model=ConversationHistoryResponse)
 async def get_conversation_history(session_id: str):
     """
     获取对话历史
-    
+
     - **session_id**: 会话ID
     - 返回对话历史和消息数量
     """
@@ -323,13 +317,13 @@ async def get_conversation_history(session_id: str):
             message_count=len(history)
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取对话历史失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取对话历史失败: {str(e)}") from e
 
 @router.delete("/conversation/{session_id}")
 async def delete_conversation(session_id: str):
     """
     删除对话会话
-    
+
     - **session_id**: 会话ID
     - 返回删除结果
     """
@@ -342,26 +336,26 @@ async def delete_conversation(session_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}") from e
 
 @router.get("/sessions")
 async def get_all_sessions():
     """
     获取所有活跃会话
-    
+
     - 返回所有活跃会话的列表
     """
     try:
         sessions = conversation_service.get_all_sessions()
         return {"sessions": sessions, "count": len(sessions)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}") from e
 
 @router.get("/conversation/{session_id}/export")
 async def export_conversation(session_id: str):
     """
     导出对话历史为JSON格式
-    
+
     - **session_id**: 会话ID
     - 返回JSON格式的对话历史
     """
@@ -374,4 +368,4 @@ async def export_conversation(session_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"导出对话失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"导出对话失败: {str(e)}") from e

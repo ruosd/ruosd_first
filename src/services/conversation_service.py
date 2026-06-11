@@ -1,10 +1,8 @@
-from typing import List, Dict, Optional
-import uuid
-from datetime import datetime, timedelta
 import json
+import uuid
+from datetime import datetime
 
-from ..utils import get_redis_client
-from ..utils import get_mysql_client
+from ..utils import get_mysql_client, get_redis_client
 from ..utils.logger import get_logger
 
 logger = get_logger("conversation_service")
@@ -32,7 +30,7 @@ class ConversationService:
         mysql = get_mysql_client()
         return mysql if mysql.is_connected() else None
 
-    async def create_conversation(self, user_id: Optional[str] = None) -> str:
+    async def create_conversation(self, user_id: str | None = None) -> str:
         session_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
 
@@ -43,7 +41,7 @@ class ConversationService:
 
         return session_id
 
-    async def add_message(self, session_id: str, role: str, content: str, agent_name: Optional[str] = None) -> bool:
+    async def add_message(self, session_id: str, role: str, content: str, agent_name: str | None = None) -> bool:
         if not self._redis_available:
             return False
         conn = self.redis.get_connection()
@@ -68,7 +66,7 @@ class ConversationService:
 
         return True
 
-    def _save_to_mysql(self, session_id: str, role: str, content: str, agent_name: Optional[str]):
+    def _save_to_mysql(self, session_id: str, role: str, content: str, agent_name: str | None):
         """写入 MySQL 作为长期持久化存储"""
         mysql = self._mysql()
         if mysql is None:
@@ -78,7 +76,7 @@ class ConversationService:
             (session_id, role, content, agent_name),
         )
 
-    async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
+    async def get_conversation_history(self, session_id: str) -> list[dict[str, str]]:
         # 优先走 Redis
         if self._redis_available:
             conn = self.redis.get_connection()
@@ -96,7 +94,7 @@ class ConversationService:
         # Redis 无数据，从 MySQL 恢复
         return self._load_from_mysql(session_id)
 
-    def _load_from_mysql(self, session_id: str) -> List[Dict[str, str]]:
+    def _load_from_mysql(self, session_id: str) -> list[dict[str, str]]:
         """从 MySQL 恢复历史消息"""
         mysql = self._mysql()
         if mysql is None:
@@ -117,7 +115,7 @@ class ConversationService:
             })
         return messages
 
-    async def get_conversation_info(self, session_id: str) -> Optional[Dict]:
+    async def get_conversation_info(self, session_id: str) -> dict | None:
         if self._redis_available:
             session_data = self.redis.get(self._get_session_key(session_id))
             if session_data is None:
@@ -133,7 +131,7 @@ class ConversationService:
             }
         return None
 
-    async def get_user_id(self, session_id: str) -> Optional[str]:
+    async def get_user_id(self, session_id: str) -> str | None:
         if self._redis_available:
             session_data = self.redis.get(self._get_session_key(session_id))
             if session_data:
@@ -168,7 +166,7 @@ class ConversationService:
                 expired_count += 1
         return expired_count
 
-    def get_all_sessions(self) -> List[Dict]:
+    def get_all_sessions(self) -> list[dict]:
         if not self._redis_available:
             return []
         conn = self.redis.get_connection()
@@ -188,7 +186,7 @@ class ConversationService:
                 })
         return sessions
 
-    async def export_conversation(self, session_id: str) -> Optional[str]:
+    async def export_conversation(self, session_id: str) -> str | None:
         session_data = self.redis.get(self._get_session_key(session_id)) if self._redis_available else None
         messages = await self.get_conversation_history(session_id)
         if not session_data and not messages:
@@ -210,7 +208,7 @@ class ConversationService:
             return 0
         return conn.scard(self.SESSION_INDEX_KEY)
 
-    async def get_redis_status(self) -> Dict:
+    async def get_redis_status(self) -> dict:
         if not self._redis_available:
             return {"available": False, "message": "Redis客户端未初始化"}
         try:

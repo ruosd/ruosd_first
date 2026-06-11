@@ -6,7 +6,7 @@ Agent 协作状态定义 — LangGraph 的核心数据结构
   写入输出，下一个节点继续处理。就像流水线上的托盘。
 """
 
-from typing import TypedDict, Optional, List
+from typing import TypedDict
 
 
 class AgentState(TypedDict):
@@ -15,7 +15,7 @@ class AgentState(TypedDict):
     """
 
     # 完整对话历史
-    messages: List[dict]
+    messages: list[dict]
 
     # 当前轮次输入
     user_query: str
@@ -33,8 +33,8 @@ class AgentState(TypedDict):
     final_response: str
 
     # 多租户
-    user_id: Optional[str]
-    session_id: Optional[str]
+    user_id: str | None
+    session_id: str | None
 
     # 当前 Agent（用于转接判断）
-    current_agent: Optional[str]
+    current_agent: str | None

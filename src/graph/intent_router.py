@@ -12,10 +12,11 @@ LLM 意图路由器 — 用语义理解替代关键词匹配
   接收完整 State，返回部分更新（只写改动的字段）。
 """
 
-from .state import AgentState
+import time
+
 from ..utils.logger import get_logger
 from ..utils.metrics import MetricsCollector
-import time
+from .state import AgentState
 
 logger = get_logger("intent_router")
 
@@ -85,6 +86,7 @@ def create_intent_classifier(llm):
     优化: 意图分类 max_tokens=10, temperature=0，节省约 90% 推理时间
     """
     from langchain_openai import ChatOpenAI
+
     from ..utils.settings import settings
 
     intent_llm = ChatOpenAI(

@@ -10,12 +10,11 @@
     logger.info("消息内容")
 """
 
+import json
 import logging
 import sys
-import json
-from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
 
 
 class JSONFormatter(logging.Formatter):

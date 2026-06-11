@@ -10,7 +10,8 @@
 依赖: pip install top-sdk（淘宝开放平台 Python SDK）
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from .base import PlatformAdapter
 
 
@@ -41,7 +42,7 @@ class TaobaoAdapter(PlatformAdapter):
 
     # ── 订单 ──
 
-    async def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_order(self, order_id: str) -> dict[str, Any] | None:
         """
         调用 taobao.trade.fullinfo.get
         文档: https://open.taobao.com/api.htm?apiId=54
@@ -57,7 +58,7 @@ class TaobaoAdapter(PlatformAdapter):
         # return self._parse_order(resp)
         raise NotImplementedError("需要配置淘宝 API 密钥并安装 top-sdk")
 
-    async def get_user_orders(self, user_id: str) -> List[Dict[str, Any]]:
+    async def get_user_orders(self, user_id: str) -> list[dict[str, Any]]:
         """
         调用 taobao.trades.sold.get
         文档: https://open.taobao.com/api.htm?apiId=46
@@ -65,11 +66,11 @@ class TaobaoAdapter(PlatformAdapter):
         # TODO: 真实实现
         raise NotImplementedError
 
-    async def search_orders(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_orders(self, keyword: str) -> list[dict[str, Any]]:
         # TODO: 调用 taobao.trades.sold.get + keyword filter
         raise NotImplementedError
 
-    async def get_shipping_info(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_shipping_info(self, order_id: str) -> dict[str, Any] | None:
         """
         调用 taobao.logistics.trace.search
         文档: https://open.taobao.com/api.htm?apiId=254
@@ -83,7 +84,7 @@ class TaobaoAdapter(PlatformAdapter):
 
     # ── 产品 ──
 
-    async def search_products(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_products(self, keyword: str) -> list[dict[str, Any]]:
         """
         调用 taobao.items.onsale.get
         文档: https://open.taobao.com/api.htm?apiId=18
@@ -91,7 +92,7 @@ class TaobaoAdapter(PlatformAdapter):
         # TODO: 真实实现
         raise NotImplementedError
 
-    async def get_product(self, product_id: str) -> Optional[Dict[str, Any]]:
+    async def get_product(self, product_id: str) -> dict[str, Any] | None:
         """
         调用 taobao.item.get
         文档: https://open.taobao.com/api.htm?apiId=20
@@ -99,7 +100,7 @@ class TaobaoAdapter(PlatformAdapter):
         # TODO: 真实实现
         raise NotImplementedError
 
-    async def recommend_products(self, preference: str) -> List[Dict[str, Any]]:
+    async def recommend_products(self, preference: str) -> list[dict[str, Any]]:
         return await self.search_products(preference)
 
     # ── 状态 ──
@@ -110,7 +111,7 @@ class TaobaoAdapter(PlatformAdapter):
 
 # ── 环境变量加载 ──
 
-def create_taobao_adapter_from_env() -> Optional[TaobaoAdapter]:
+def create_taobao_adapter_from_env() -> TaobaoAdapter | None:
     """从环境变量创建淘宝适配器"""
     import os
 

@@ -2,27 +2,38 @@
 管理接口路由 - 用于查看和管理记忆系统数据
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends, Body, UploadFile, File, Form, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+import os
+import uuid
 from datetime import datetime, timedelta
+from typing import Any
+
+import jwt
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-import os
-import jwt
-import uuid
-from src.utils.errors import AppError, ErrorCode
-from src.utils.password import hash_password, verify_password
+
 from src.services import (
+    DocumentProcessor,
+    DocumentType,
+    MemoryType,
     get_chroma_store_service,
     get_memory_service,
-    DocumentProcessor,
-    MemoryType,
-    DocumentType
 )
-from src.services.document_processor import ProcessedDocument
+from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
+from src.utils.password import hash_password, verify_password
 from src.utils.settings import settings
 
 logger = get_logger("admin_router")
@@ -74,7 +85,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise AppError(ErrorCode.UNAUTHORIZED, status_code=401)
         return username
     except jwt.PyJWTError:
-        raise AppError(ErrorCode.UNAUTHORIZED, status_code=401)
+        raise AppError(ErrorCode.UNAUTHORIZED, status_code=401) from None
 
 
 @router.post("/login", summary="管理员登录")
@@ -82,17 +93,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def login(request: Request, body: LoginRequest):
     """
     管理员登录接口
-    
+
     Args:
         request: 登录请求，包含用户名和密码
-        
+
     Returns:
         包含token的登录结果
     """
     try:
         username = body.username
         password = body.password
-        
+
         # 验证用户名和密码
         if username not in ADMIN_ACCOUNTS:
             raise AppError(ErrorCode.INVALID_CREDENTIALS, status_code=401)
@@ -101,24 +112,24 @@ async def login(request: Request, body: LoginRequest):
         password_hash = ADMIN_ACCOUNTS.get(username)
         if not password_hash or not verify_password(password, password_hash):
             raise AppError(ErrorCode.INVALID_CREDENTIALS, status_code=401)
-        
+
         # 生成JWT令牌
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": username}, expires_delta=access_token_expires
         )
-        
+
         logger.info(f"管理员登录成功: {username}")
         return {"status": "success", "username": username, "token": access_token}
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"登录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="登录失败")
+        raise HTTPException(status_code=500, detail="登录失败") from e
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """创建JWT访问令牌"""
     to_encode = data.copy()
     if expires_delta:
@@ -134,7 +145,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 async def get_current_user_info(current_user: str = Depends(get_current_user)):
     """
     获取当前登录用户信息
-    
+
     Returns:
         当前用户信息
     """
@@ -145,7 +156,7 @@ async def get_current_user_info(current_user: str = Depends(get_current_user)):
 async def list_collections():
     """
     列出 ChromaDB 中所有的向量集合
-    
+
     Returns:
         集合名称列表
     """
@@ -155,24 +166,24 @@ async def list_collections():
         return {"status": "success", "collections": collections}
     except Exception as e:
         logger.error(f"获取集合列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/collections/{collection_name}/stats", summary="获取集合统计信息")
 async def get_collection_stats(collection_name: str):
     """
     获取指定集合的统计信息
-    
+
     Args:
         collection_name: 集合名称
-        
+
     Returns:
         集合统计信息（文档数、向量维度等）
     """
     try:
         chroma_service = await get_chroma_store_service()
         stats = chroma_service.get_collection_stats(collection_name)
-        
+
         if stats:
             return {
                 "status": "success",
@@ -189,7 +200,7 @@ async def get_collection_stats(collection_name: str):
         raise
     except Exception as e:
         logger.error(f"获取集合统计失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/collections/{collection_name}/search", summary="搜索集合中的文档")
@@ -200,19 +211,19 @@ async def search_collection(
 ):
     """
     在指定集合中搜索相关文档
-    
+
     Args:
         collection_name: 集合名称
         query: 搜索关键词
         n_results: 返回结果数量（默认5，范围1-20）
-        
+
     Returns:
         搜索结果列表
     """
     try:
         chroma_service = await get_chroma_store_service()
         results = await chroma_service.search(collection_name, query, n_results=n_results)
-        
+
         formatted_results = []
         for i, result in enumerate(results):
             formatted_results.append({
@@ -224,7 +235,7 @@ async def search_collection(
                 "has_parent": result.parent_content is not None,
                 "parent_section": result.metadata.get("section_title", "")
             })
-        
+
         return {
             "status": "success",
             "query": query,
@@ -233,7 +244,7 @@ async def search_collection(
         }
     except Exception as e:
         logger.error(f"搜索集合失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/collections/{collection_name}/documents", summary="获取集合中的所有文档")
@@ -244,26 +255,26 @@ async def get_all_documents(
 ):
     """
     获取集合中的所有文档（分页）
-    
+
     Args:
         collection_name: 集合名称
         limit: 返回数量（默认50，范围1-200）
         offset: 偏移量（默认0）
-        
+
     Returns:
         文档列表和总数
     """
     try:
         chroma_service = await get_chroma_store_service()
-        
+
         # 检查集合是否存在
         collections = chroma_service.list_collections()
         if collection_name not in collections:
             raise HTTPException(status_code=404, detail=f"集合 {collection_name} 不存在")
-        
+
         documents = chroma_service.get_all_documents(collection_name, limit, offset)
         total_count = chroma_service.get_document_count(collection_name)
-        
+
         return {
             "status": "success",
             "collection_name": collection_name,
@@ -276,41 +287,41 @@ async def get_all_documents(
         raise
     except Exception as e:
         logger.error(f"获取文档列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.delete("/collections/{collection_name}/documents", summary="删除集合中的文档")
 async def delete_documents(
     collection_name: str,
-    ids: Optional[List[str]] = None,
-    filter_dict: Optional[Dict[str, Any]] = None
+    ids: list[str] | None = None,
+    filter_dict: dict[str, Any] | None = None
 ):
     """
     删除集合中的文档
-    
+
     Args:
         collection_name: 集合名称
         ids: 要删除的文档ID列表（与filter_dict二选一）
         filter_dict: 过滤条件（与ids二选一）
-        
+
     Returns:
         删除结果
     """
     try:
         chroma_service = await get_chroma_store_service()
-        
+
         if ids:
-            success = chroma_service.delete_documents(collection_name, ids)
+            chroma_service.delete_documents(collection_name, ids)
             return {
                 "status": "success",
                 "message": f"成功删除 {len(ids)} 个文档",
                 "deleted_ids": ids
             }
         elif filter_dict:
-            success = chroma_service.delete_by_filter(collection_name, filter_dict)
+            chroma_service.delete_by_filter(collection_name, filter_dict)
             return {
                 "status": "success",
-                "message": f"按条件删除成功",
+                "message": "按条件删除成功",
                 "filter": filter_dict
             }
         else:
@@ -319,7 +330,7 @@ async def delete_documents(
         raise
     except Exception as e:
         logger.error(f"删除文档失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.delete("/collections/{collection_name}", summary="删除整个集合")
@@ -337,35 +348,35 @@ async def delete_collection(collection_name: str):
         raise
     except Exception as e:
         logger.error(f"删除集合失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/memory/stats", summary="获取记忆系统统计信息")
 async def get_memory_stats():
     """
     获取记忆系统的整体统计信息
-    
+
     Returns:
         各类型记忆的统计数据
     """
     try:
         memory_service = await get_memory_service()
         stats = await memory_service.get_memory_stats()
-        
+
         return {
             "status": "success",
             "data": stats
         }
     except Exception as e:
         logger.error(f"获取记忆统计失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/memory/types", summary="获取记忆类型列表")
 async def get_memory_types():
     """
     获取所有支持的记忆类型
-    
+
     Returns:
         记忆类型枚举列表
     """
@@ -383,15 +394,15 @@ async def get_memory_types():
         }
     except Exception as e:
         logger.error(f"获取记忆类型失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 class MemoryQueryRequest(BaseModel):
     """记忆检索请求"""
     query_text: str = Field("", description="查询文本")
-    user_id: Optional[str] = Field(None, max_length=64)
-    session_id: Optional[str] = Field(None, max_length=128)
-    memory_types: Optional[List[str]] = Field(None, description="记忆类型列表")
+    user_id: str | None = Field(None, max_length=64)
+    session_id: str | None = Field(None, max_length=128)
+    memory_types: list[str] | None = Field(None, description="记忆类型列表")
     n_results: int = Field(5, description="返回结果数")
 
 
@@ -399,29 +410,29 @@ class MemoryQueryRequest(BaseModel):
 async def query_memory(req: MemoryQueryRequest):
     """
     检索与查询文本相关的记忆上下文
-    
+
     Args:
         query_text: 查询文本
         user_id: 用户ID（可选）
         session_id: 会话ID（可选）
         memory_types: 记忆类型列表（可选，如 ["SHORT_TERM", "LONG_TERM"]）
         n_results: 返回结果数量（默认5）
-        
+
     Returns:
         记忆上下文文本和相关记忆列表
     """
     try:
         memory_service = await get_memory_service()
-        
+
         # 转换记忆类型
         if req.memory_types:
             try:
                 types = [MemoryType[name] for name in req.memory_types]
             except KeyError as e:
-                raise HTTPException(status_code=400, detail=f"无效的记忆类型: {e}")
+                raise HTTPException(status_code=400, detail=f"无效的记忆类型: {e}") from e
         else:
             types = None
-        
+
         # 检索上下文
         context = await memory_service.retrieve_memory_context(
             query_text=req.query_text,
@@ -430,7 +441,7 @@ async def query_memory(req: MemoryQueryRequest):
             session_id=req.session_id,
             n_results=req.n_results
         )
-        
+
         return {
             "status": "success",
             "query": req.query_text,
@@ -441,41 +452,41 @@ async def query_memory(req: MemoryQueryRequest):
         raise
     except Exception as e:
         logger.error(f"检索记忆失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.delete("/memory/cleanup", summary="清理过期记忆")
 async def cleanup_memory(
-    memory_type: Optional[str] = None,
-    older_than_days: Optional[int] = 30
+    memory_type: str | None = None,
+    older_than_days: int | None = 30
 ):
     """
     清理过期记忆
-    
+
     Args:
         memory_type: 记忆类型（可选，不指定则清理所有类型）
         older_than_days: 清理多少天前的记忆（默认30天）
-        
+
     Returns:
         清理结果
     """
     try:
         memory_service = await get_memory_service()
-        
+
         # 转换记忆类型
         if memory_type:
             try:
                 mem_type = MemoryType[memory_type]
             except KeyError:
-                raise HTTPException(status_code=400, detail=f"无效的记忆类型: {memory_type}")
+                raise HTTPException(status_code=400, detail=f"无效的记忆类型: {memory_type}") from None
         else:
             mem_type = None
-        
+
         cleaned_count = await memory_service.cleanup_old_memories(
             memory_type=mem_type,
             older_than_days=older_than_days
         )
-        
+
         return {
             "status": "success",
             "message": f"成功清理 {cleaned_count} 条过期记忆",
@@ -486,7 +497,7 @@ async def cleanup_memory(
         raise
     except Exception as e:
         logger.error(f"清理记忆失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/documents/process", summary="处理文档并导入知识库")
@@ -497,14 +508,14 @@ async def process_and_import_document(
 ):
     """
     处理文本内容并导入到知识库
-    
+
     Args:
         request: 文档处理请求，包含：
             - content: 文档内容
             - doc_id: 文档ID
             - doc_type: 文档类型（TXT/PDF/DOCX，默认TXT）
             - collection_name: 目标集合名称（默认knowledge_base）
-        
+
     Returns:
         处理结果和导入状态
     """
@@ -520,8 +531,8 @@ async def process_and_import_document(
         try:
             document_type = DocumentType[body.doc_type]
         except KeyError:
-            raise HTTPException(status_code=400, detail=f"无效的文档类型: {body.doc_type}")
-        
+            raise HTTPException(status_code=400, detail=f"无效的文档类型: {body.doc_type}") from None
+
         # 处理文档
         # 添加时间戳避免重复上传时 ID 冲突
         unique_doc_id = f"{body.doc_id}_{uuid.uuid4().hex[:8]}"
@@ -544,7 +555,7 @@ async def process_and_import_document(
                     "chunk_index": chunk.chunk_index
                 })
                 ids.append(f"{unique_doc_id}_{chunk.chunk_id}")
-        
+
         # 导入到向量数据库
         chroma_service = await get_chroma_store_service()
         success = await chroma_service.add_documents(
@@ -554,7 +565,7 @@ async def process_and_import_document(
             ids,
             enable_parent_retrieval=True
         )
-        
+
         return {
             "status": "success",
             "doc_id": unique_doc_id,
@@ -567,7 +578,7 @@ async def process_and_import_document(
         raise
     except Exception as e:
         logger.error(f"处理文档失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/documents/upload", summary="上传文件并导入知识库")
@@ -579,11 +590,11 @@ async def upload_and_import_document(
 ):
     """
     上传文件并导入到知识库
-    
+
     Args:
         file: 上传的文件（支持 TXT、PDF、DOCX）
         collection_name: 目标集合名称（默认knowledge_base）
-        
+
     Returns:
         处理结果和导入状态
     """
@@ -619,12 +630,12 @@ async def upload_and_import_document(
             doc = processor.process_file(tmp_path, doc_id=doc_id)
         finally:
             os.unlink(tmp_path)  # 删除临时文件
-        
+
         # 准备数据
         documents = []
         metadatas = []
         ids = []
-        
+
         for section in doc.sections:
             for chunk in section.chunks:
                 documents.append(chunk.content)
@@ -637,7 +648,7 @@ async def upload_and_import_document(
                     "filename": filename
                 })
                 ids.append(f"{doc_id}_{chunk.chunk_id}")
-        
+
         # 导入到向量数据库
         chroma_service = await get_chroma_store_service()
         success = await chroma_service.add_documents(
@@ -647,9 +658,9 @@ async def upload_and_import_document(
             ids,
             enable_parent_retrieval=True
         )
-        
+
         logger.info(f"文件上传成功: {filename}, 导入 {len(documents)} 个文档块")
-        
+
         return {
             "status": "success",
             "filename": filename,
@@ -664,7 +675,7 @@ async def upload_and_import_document(
         raise
     except Exception as e:
         logger.error(f"上传文件失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # ── 异步文件上传（Celery 任务队列）──
@@ -716,6 +727,7 @@ async def get_task_status(task_id: str):
       FAILURE   - 处理失败（result 字段包含错误信息）
     """
     from celery.result import AsyncResult
+
     from src.tasks.celery_app import app as celery_app
 
     result = AsyncResult(task_id, app=celery_app)
@@ -736,8 +748,10 @@ async def get_task_status(task_id: str):
 @router.post("/seed", summary="填充测试数据")
 async def seed_test_data():
     """一键填充: 3个用户 + 20条订单。测试账号: zhangsan/123456"""
-    import random, traceback
+    import random
+    import traceback
     from datetime import datetime, timedelta
+
     from src.services import get_user_service
 
     logger.info("开始填充测试数据...")
@@ -808,7 +822,7 @@ async def seed_test_data():
 
     except Exception as e:
         logger.error(f"填充数据失败: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/sql/users", summary="查看所有用户")
@@ -879,7 +893,7 @@ async def get_sql_conversations():
 async def health_check():
     """
     管理接口健康检查
-    
+
     Returns:
         服务状态
     """

@@ -1,6 +1,4 @@
-from typing import Optional, Dict, List
 from datetime import datetime, timedelta
-import random
 
 from ..utils import get_mysql_client
 from ..utils.logger import get_logger
@@ -11,19 +9,19 @@ logger = get_logger("order_service")
 class OrderService:
     """
     订单服务 - 管理订单数据和状态
-    
+
     功能：
     - 查询订单详情和状态
     - 订单搜索和过滤
     - 物流信息查询
-    
+
     使用MySQL数据库存储订单信息
     """
 
     def __init__(self):
         self.mysql = get_mysql_client()
         self._mysql_available = self.mysql.is_connected()
-        
+
         if self._mysql_available:
             logger.info("订单服务: 使用MySQL数据库")
             # 初始化测试数据
@@ -32,7 +30,7 @@ class OrderService:
             logger.warning("订单服务: MySQL不可用，使用模拟数据")
             self.orders = self._load_mock_orders()
 
-    def _load_mock_orders(self) -> List[Dict]:
+    def _load_mock_orders(self) -> list[dict]:
         """加载模拟订单数据（MySQL不可用时使用）"""
         base_time = datetime.now()
         return [
@@ -410,7 +408,7 @@ class OrderService:
             # 检查订单是否已存在
             query = "SELECT COUNT(*) as count FROM orders WHERE order_id = %s"
             result = self.mysql.execute_query(query, (order["order_id"],))
-            
+
             if result and result[0]["count"] == 0:
                 # 插入订单
                 now = datetime.now()
@@ -458,13 +456,13 @@ class OrderService:
 
         logger.info("测试数据初始化完成")
 
-    async def get_order_details(self, order_id: str) -> Optional[str]:
+    async def get_order_details(self, order_id: str) -> str | None:
         """
         根据订单号查询订单详情
-        
+
         Args:
             order_id: 订单号
-            
+
         Returns:
             订单详情字符串，如果未找到则返回None（表示订单不存在）
         """
@@ -473,14 +471,14 @@ class OrderService:
         else:
             return await self._get_order_details_mock(order_id)
 
-    async def _get_order_details_mysql(self, order_id: str) -> Optional[str]:
+    async def _get_order_details_mysql(self, order_id: str) -> str | None:
         """从MySQL查询订单详情"""
         # 查询订单基本信息
         order_query = """
         SELECT * FROM orders WHERE order_id = %s
         """
         order_result = self.mysql.execute_query(order_query, (order_id,))
-        
+
         if not order_result:
             # 订单不存在，返回None表示订单不存在
             return None
@@ -492,7 +490,7 @@ class OrderService:
         SELECT * FROM order_items WHERE order_id = %s
         """
         items_result = self.mysql.execute_query(items_query, (order_id,))
-        
+
         items_info = "\n".join([
             f"- {item['product_name']} x{item['quantity']} = ¥{item['price']}"
             for item in items_result
@@ -503,7 +501,7 @@ class OrderService:
         SELECT * FROM tracking_info WHERE order_id = %s
         """
         tracking_result = self.mysql.execute_query(tracking_query, (order_id,))
-        
+
         tracking_info = "暂无物流信息"
         if tracking_result:
             tracking = tracking_result[0]
@@ -512,7 +510,7 @@ class OrderService:
                 estimated_delivery = estimated_delivery.strftime('%Y-%m-%d')
             else:
                 estimated_delivery = "暂无"
-            
+
             tracking_info = f"""
 物流单号：{tracking['tracking_number']}
 物流状态：{tracking['status']}
@@ -533,7 +531,7 @@ class OrderService:
 {tracking_info}
 """
 
-    async def _get_order_details_mock(self, order_id: str) -> Optional[str]:
+    async def _get_order_details_mock(self, order_id: str) -> str | None:
         """从模拟数据查询订单详情（MySQL不可用时使用）"""
         for order in self.orders:
             if order["order_id"] == order_id:
@@ -569,7 +567,7 @@ class OrderService:
     async def get_order_count(self) -> int:
         """
         获取订单总数（用于验证MySQL连接）
-        
+
         Returns:
             订单总数
         """
@@ -582,21 +580,21 @@ class OrderService:
         else:
             return len(self.orders)
 
-    async def get_user_orders(self, user_id: str) -> List[Dict]:
+    async def get_user_orders(self, user_id: str) -> list[dict]:
         """
         查询用户的所有订单
-        
+
         Args:
             user_id: 用户ID
-            
+
         Returns:
             用户订单列表
         """
         if self._mysql_available:
             query = """
-            SELECT order_id, status, total_amount, created_at 
-            FROM orders 
-            WHERE user_id = %s 
+            SELECT order_id, status, total_amount, created_at
+            FROM orders
+            WHERE user_id = %s
             ORDER BY created_at DESC
             """
             result = self.mysql.execute_query(query, (user_id,))
@@ -615,18 +613,18 @@ class OrderService:
     async def update_order_status(self, order_id: str, new_status: str) -> bool:
         """
         更新订单状态
-        
+
         Args:
             order_id: 订单号
             new_status: 新状态
-            
+
         Returns:
             更新是否成功
         """
         if self._mysql_available:
             query = """
-            UPDATE orders 
-            SET status = %s, updated_at = %s 
+            UPDATE orders
+            SET status = %s, updated_at = %s
             WHERE order_id = %s
             """
             row_count = self.mysql.execute_update(query, (new_status, datetime.now(), order_id))
@@ -638,13 +636,13 @@ class OrderService:
                     return True
             return False
 
-    async def search_orders(self, keyword: str) -> List[Dict]:
+    async def search_orders(self, keyword: str) -> list[dict]:
         """
         搜索订单
-        
+
         Args:
             keyword: 搜索关键词
-            
+
         Returns:
             匹配的订单列表
         """

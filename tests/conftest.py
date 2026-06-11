@@ -11,13 +11,16 @@ def _mock_package(name):
     for i in range(len(parts)):
         parent = ".".join(parts[: i + 1])
         if parent not in sys.modules:
-            sys.modules[parent] = MagicMock()
+            mod = MagicMock()
+            mod.__path__ = []
+            sys.modules[parent] = mod
 
 
 # 本地缺失的全部外部依赖
 _missing = [
     "mysql",
     "mysql.connector",
+    "mysql.connector.pooling",
     "slowapi",
     "slowapi.util",
     "slowapi.errors",
@@ -26,6 +29,8 @@ _missing = [
     "langchain_openai",
     "langchain_community",
     "langgraph",
+    "langgraph.graph",
+    "langgraph.graph.message",
     "chromadb",
     "chromadb.config",
     "chromadb.api",

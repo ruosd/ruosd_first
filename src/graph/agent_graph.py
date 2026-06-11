@@ -8,16 +8,17 @@ Agent 协作图 — LangGraph 核心编排
   LLM 思考 → 调用工具 → 获取结果 → LLM 再思考 → ... → 最终回复
 """
 
-from typing import Literal
 import time
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from typing import Literal
 
-from .state import AgentState
-from .intent_router import create_intent_classifier
-from .tools import ORDER_TOOLS, PRODUCT_TOOLS, SERVICE_TOOLS
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
+
 from ..utils.logger import get_logger
 from ..utils.metrics import MetricsCollector
+from .intent_router import create_intent_classifier
+from .state import AgentState
+from .tools import ORDER_TOOLS, PRODUCT_TOOLS, SERVICE_TOOLS
 
 logger = get_logger("agent_graph")
 
@@ -77,8 +78,8 @@ def build_agent_graph(llm) -> StateGraph:
         async def agent_node(state: AgentState) -> dict:
             """Agent 节点: 用 LLM + 工具处理用户问题"""
             query = state.get("user_query", "")
-            intent = state.get("intent", agent_type)
-            messages = list(state.get("messages", []))
+            state.get("intent", agent_type)
+            list(state.get("messages", []))
             context = state.get("context", "")
 
             # 构建消息

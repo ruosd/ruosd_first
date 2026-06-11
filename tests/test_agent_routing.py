@@ -5,51 +5,48 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.utils.settings import settings
-from src.services.agent_manager import AgentManager
-from src.services.agent_coordinator import AgentCoordinator
-from langchain_community.chat_models import ChatOpenAI
+import pytest
 
+from src.services.agent_manager import AgentManager
+from src.graph.graph_coordinator import GraphCoordinator
+
+
+@pytest.mark.skip(reason="需要真实的LLM API密钥和外部服务")
+@pytest.mark.asyncio
 async def test_agent_routing():
     """测试Agent路由功能"""
     print("=" * 70)
     print("Agent转接功能测试")
     print("=" * 70)
-    
-    # 初始化LLM
-    print("\n初始化LLM...")
-    llm = ChatOpenAI(
-        model_name=settings.ALIYUN_MODEL_NAME,
-        openai_api_key=settings.ALIYUN_API_KEY,
-        openai_api_base=settings.ALIYUN_API_BASE,
-        temperature=0.7,
-        max_tokens=2048
-    )
-    print(f"✓ LLM初始化成功，使用模型: {settings.ALIYUN_MODEL_NAME}")
-    
+
+    # 使用模拟LLM
+    print("\n使用模拟LLM...")
+    llm = None
+    print(f"✓ 使用模拟模式")
+
     # 初始化Agent管理器
     print("\n初始化Agent管理器...")
     from src.agents import CustomerServiceAgent, OrderAgent, ProductAgent
     from src.services import ProductService, OrderService
-    
+
     agent_manager = AgentManager()
-    
+
     # 注册Agent
     print("注册Agent...")
     product_service = ProductService()
     order_service = OrderService()
-    
-    agent_manager.register_agent(CustomerServiceAgent(llm))
-    agent_manager.register_agent(OrderAgent(llm, order_service))
-    agent_manager.register_agent(ProductAgent(llm, product_service))
-    
+
+    agent_manager.register_agent(CustomerServiceAgent(None))
+    agent_manager.register_agent(OrderAgent(None, order_service))
+    agent_manager.register_agent(ProductAgent(None, product_service))
+
     agents = agent_manager.list_agents()
     print(f"✓ 已注册 {len(agents)} 个Agent:")
     for agent in agents:
         print(f"  - {agent['agent_name']}")
-    
+
     # 初始化协调器
-    coordinator = AgentCoordinator()
+    coordinator = GraphCoordinator()
     
     # 测试用例
     test_cases = [

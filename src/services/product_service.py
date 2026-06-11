@@ -1,5 +1,5 @@
-from typing import Optional, Dict, List
 import json
+
 from ..utils import get_mysql_client
 from ..utils.logger import get_logger
 
@@ -19,7 +19,7 @@ class ProductService:
     def __init__(self):
         self.products = self._load_from_mysql() or self._load_mock_products()
 
-    def _load_from_mysql(self) -> Optional[List[Dict]]:
+    def _load_from_mysql(self) -> list[dict] | None:
         """从 MySQL 加载产品数据，表为空时返回 None"""
         try:
             mysql = get_mysql_client()
@@ -48,7 +48,7 @@ class ProductService:
             logger.warning(f"从MySQL加载产品失败: {e}")
             return None
 
-    def _seed_mysql(self, mysql) -> Optional[List[Dict]]:
+    def _seed_mysql(self, mysql) -> list[dict] | None:
         """首次初始化时把模拟数据写入 MySQL"""
         mock = self._load_mock_products()
         for p in mock:
@@ -59,7 +59,7 @@ class ProductService:
         logger.info(f"已将{len(mock)}个模拟产品写入MySQL")
         return mock
 
-    def _load_mock_products(self) -> List[Dict]:
+    def _load_mock_products(self) -> list[dict]:
         """加载模拟产品数据"""
         return [
             {
@@ -135,7 +135,7 @@ class ProductService:
             }
         ]
 
-    async def get_product_details(self, product_name: str) -> Optional[Dict]:
+    async def get_product_details(self, product_name: str) -> dict | None:
         """
         根据产品名称查询产品详情
 
@@ -158,7 +158,7 @@ class ProductService:
                 }
         return None
 
-    async def search_products(self, keyword: str) -> List[Dict]:
+    async def search_products(self, keyword: str) -> list[dict]:
         """
         搜索产品
 
@@ -181,7 +181,7 @@ class ProductService:
                 })
         return results
 
-    async def recommend_products(self, product_id: int, limit: int = 3) -> List[Dict]:
+    async def recommend_products(self, product_id: int, limit: int = 3) -> list[dict]:
         """
         推荐相关产品
 
@@ -216,6 +216,6 @@ class ProductService:
 
         return recommendations
 
-    def get_all_products(self) -> List[Dict]:
+    def get_all_products(self) -> list[dict]:
         """获取所有产品列表"""
         return self.products

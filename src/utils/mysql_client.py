@@ -1,11 +1,11 @@
+from typing import Any, Optional
+
 import mysql.connector
 from mysql.connector import Error
 from mysql.connector.pooling import MySQLConnectionPool, PoolError
-from typing import Optional, Dict, List, Any
-import json
 
-from ..utils.settings import settings
 from ..utils.logger import get_logger
+from ..utils.settings import settings
 
 logger = get_logger("mysql_client")
 
@@ -14,7 +14,7 @@ class MySQLClient:
     """MySQL数据库客户端封装类（连接池）"""
 
     _instance: Optional['MySQLClient'] = None
-    _pool: Optional[MySQLConnectionPool] = None
+    _pool: MySQLConnectionPool | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -51,7 +51,7 @@ class MySQLClient:
             logger.error(f"MySQL连接池创建失败: {e}")
             self._pool = None
 
-    def get_connection(self) -> Optional[mysql.connector.MySQLConnection]:
+    def get_connection(self) -> mysql.connector.MySQLConnection | None:
         """从连接池获取连接"""
         if self._pool is None:
             self._init_pool()
@@ -173,7 +173,7 @@ class MySQLClient:
         finally:
             cursor.close()
 
-    def execute_query(self, query: str, params: Optional[tuple] = None) -> Optional[List[Dict[str, Any]]]:
+    def execute_query(self, query: str, params: tuple | None = None) -> list[dict[str, Any]] | None:
         """执行查询并返回结果"""
         conn = self.get_connection()
         if conn is None:
@@ -191,7 +191,7 @@ class MySQLClient:
             cursor.close()
             conn.close()
 
-    def execute_update(self, query: str, params: Optional[tuple] = None) -> int:
+    def execute_update(self, query: str, params: tuple | None = None) -> int:
         """执行更新操作并返回受影响的行数"""
         conn = self.get_connection()
         if conn is None:

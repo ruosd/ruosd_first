@@ -10,10 +10,7 @@ def get_platform_adapter() -> PlatformAdapter:
     global _adapter
     if _adapter is None:
         taobao = create_taobao_adapter_from_env()
-        if taobao and taobao.is_connected():
-            _adapter = taobao
-        else:
-            _adapter = MockAdapter()
+        _adapter = taobao if taobao and taobao.is_connected() else MockAdapter()
     return _adapter
 
 

@@ -2,9 +2,8 @@
 Agent 可观测性 — 记录 LLM 调用、工具调用、意图识别的指标
 """
 
-import time
 import json
-from typing import Optional
+
 from ..utils import get_mysql_client
 from ..utils.logger import get_logger
 
@@ -24,9 +23,9 @@ class MetricsCollector:
         agent_name: str,
         latency_ms: float,
         success: bool,
-        session_id: Optional[str] = None,
-        token_count: Optional[int] = None,
-        error: Optional[str] = None,
+        session_id: str | None = None,
+        token_count: int | None = None,
+        error: str | None = None,
     ):
         """记录 LLM 调用"""
         db = MetricsCollector._db()
@@ -44,8 +43,8 @@ class MetricsCollector:
         tool_name: str,
         latency_ms: float,
         success: bool,
-        session_id: Optional[str] = None,
-        error: Optional[str] = None,
+        session_id: str | None = None,
+        error: str | None = None,
     ):
         """记录工具调用"""
         db = MetricsCollector._db()
@@ -61,8 +60,8 @@ class MetricsCollector:
     def record_intent(
         agent_name: str,
         intent: str,
-        session_id: Optional[str] = None,
-        latency_ms: Optional[float] = None,
+        session_id: str | None = None,
+        latency_ms: float | None = None,
     ):
         """记录意图识别结果"""
         db = MetricsCollector._db()

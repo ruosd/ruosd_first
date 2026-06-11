@@ -7,11 +7,13 @@
 """
 
 import uuid
-from .celery_app import app
+
 from src.services import DocumentProcessor, get_chroma_store_service
 from src.services.document_processor import DocumentType
 from src.services.ollama_embedding_service import get_ollama_embedding_service
 from src.utils.logger import get_logger
+
+from .celery_app import app
 
 logger = get_logger("document_tasks")
 

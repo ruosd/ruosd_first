@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
 from datetime import datetime
+
+from pydantic import BaseModel, Field
+
 
 class Product(BaseModel):
     """产品数据模型"""
@@ -10,10 +11,10 @@ class Product(BaseModel):
     price: float = Field(..., gt=0, description="产品价格")
     stock: int = Field(..., ge=0, description="库存数量")
     category: str = Field(..., description="产品分类")
-    specifications: Dict[str, str] = Field(default_factory=dict, description="产品规格参数")
-    created_at: Optional[datetime] = Field(default_factory=datetime.now, description="创建时间")
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="更新时间")
-    
+    specifications: dict[str, str] = Field(default_factory=dict, description="产品规格参数")
+    created_at: datetime | None = Field(default_factory=datetime.now, description="创建时间")
+    updated_at: datetime | None = Field(default_factory=datetime.now, description="更新时间")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -37,21 +38,21 @@ class ProductCreate(BaseModel):
     price: float = Field(..., gt=0, description="产品价格")
     stock: int = Field(..., ge=0, description="库存数量")
     category: str = Field(..., min_length=1, description="产品分类")
-    specifications: Dict[str, str] = Field(default_factory=dict, description="产品规格参数")
+    specifications: dict[str, str] = Field(default_factory=dict, description="产品规格参数")
 
 class ProductUpdate(BaseModel):
     """更新产品请求模型"""
-    name: Optional[str] = Field(None, min_length=1, max_length=200, description="产品名称")
-    description: Optional[str] = Field(None, min_length=1, description="产品描述")
-    price: Optional[float] = Field(None, gt=0, description="产品价格")
-    stock: Optional[int] = Field(None, ge=0, description="库存数量")
-    category: Optional[str] = Field(None, min_length=1, description="产品分类")
-    specifications: Optional[Dict[str, str]] = Field(None, description="产品规格参数")
+    name: str | None = Field(None, min_length=1, max_length=200, description="产品名称")
+    description: str | None = Field(None, min_length=1, description="产品描述")
+    price: float | None = Field(None, gt=0, description="产品价格")
+    stock: int | None = Field(None, ge=0, description="库存数量")
+    category: str | None = Field(None, min_length=1, description="产品分类")
+    specifications: dict[str, str] | None = Field(None, description="产品规格参数")
 
 class ProductSearch(BaseModel):
     """产品搜索请求模型"""
     keyword: str = Field(..., min_length=1, description="搜索关键词")
-    category: Optional[str] = Field(None, description="产品分类过滤")
-    min_price: Optional[float] = Field(None, ge=0, description="最低价格")
-    max_price: Optional[float] = Field(None, ge=0, description="最高价格")
+    category: str | None = Field(None, description="产品分类过滤")
+    min_price: float | None = Field(None, ge=0, description="最低价格")
+    max_price: float | None = Field(None, ge=0, description="最高价格")
     limit: int = Field(10, ge=1, le=100, description="返回结果数量限制")

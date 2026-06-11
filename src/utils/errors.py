@@ -9,7 +9,7 @@
 """
 
 from enum import Enum
-from typing import Optional, Any
+from typing import Any
 
 
 class ErrorCode(str, Enum):
@@ -50,7 +50,7 @@ class AppError(Exception):
     def __init__(
         self,
         code: ErrorCode,
-        message: Optional[str] = None,
+        message: str | None = None,
         status_code: int = 400,
         details: Any = None,
     ):

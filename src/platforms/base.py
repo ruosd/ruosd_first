@@ -6,7 +6,7 @@ Service 层只依赖此接口，不关心数据来自哪里。
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 
 class PlatformAdapter(ABC):
@@ -15,19 +15,19 @@ class PlatformAdapter(ABC):
     # ── 订单 ──
 
     @abstractmethod
-    async def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_order(self, order_id: str) -> dict[str, Any] | None:
         """查询单个订单"""
 
     @abstractmethod
-    async def get_user_orders(self, user_id: str) -> List[Dict[str, Any]]:
+    async def get_user_orders(self, user_id: str) -> list[dict[str, Any]]:
         """查询用户订单列表"""
 
     @abstractmethod
-    async def search_orders(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_orders(self, keyword: str) -> list[dict[str, Any]]:
         """按关键词搜索订单"""
 
     @abstractmethod
-    async def get_shipping_info(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_shipping_info(self, order_id: str) -> dict[str, Any] | None:
         """查询物流信息"""
 
     @abstractmethod
@@ -37,15 +37,15 @@ class PlatformAdapter(ABC):
     # ── 产品 ──
 
     @abstractmethod
-    async def search_products(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_products(self, keyword: str) -> list[dict[str, Any]]:
         """搜索产品"""
 
     @abstractmethod
-    async def get_product(self, product_id: str) -> Optional[Dict[str, Any]]:
+    async def get_product(self, product_id: str) -> dict[str, Any] | None:
         """获取产品详情"""
 
     @abstractmethod
-    async def recommend_products(self, preference: str) -> List[Dict[str, Any]]:
+    async def recommend_products(self, preference: str) -> list[dict[str, Any]]:
         """推荐产品"""
 
     # ── 状态 ──

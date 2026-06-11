@@ -1,7 +1,8 @@
+import time
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Dict, Any
-import time
+
 from ..graph.graph_coordinator import GraphCoordinator
 from ..utils.logger import get_logger
 
@@ -20,7 +21,7 @@ class SystemConfig(BaseModel):
 async def get_system_info():
     """
     获取系统信息
-    
+
     返回当前系统状态和配置信息
     """
     try:
@@ -34,7 +35,7 @@ async def get_system_info():
         return info
     except Exception as e:
         logger.error(f"获取系统信息失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取系统信息失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取系统信息失败: {str(e)}") from e
 
 
 @router.get("/config")
@@ -51,19 +52,19 @@ async def get_system_config():
 async def update_system_config(config: SystemConfig):
     """
     更新系统配置
-    
+
     - **rewrite_enabled**: 是否启用问题重写功能
     """
     try:
         coordinator.rewrite_enabled = config.rewrite_enabled
-        
+
         if config.rewrite_enabled:
             coordinator.question_rewriter.enable()
         else:
             coordinator.question_rewriter.disable()
-        
+
         logger.info(f"系统配置已更新: rewrite_enabled={config.rewrite_enabled}")
-        
+
         return {
             "message": "配置更新成功",
             "config": {
@@ -72,7 +73,7 @@ async def update_system_config(config: SystemConfig):
         }
     except Exception as e:
         logger.error(f"更新系统配置失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"更新系统配置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"更新系统配置失败: {str(e)}") from e
 
 
 @router.post("/rewrite/toggle")
@@ -82,23 +83,23 @@ async def toggle_rewrite():
     """
     try:
         coordinator.rewrite_enabled = not coordinator.rewrite_enabled
-        
+
         if coordinator.rewrite_enabled:
             coordinator.question_rewriter.enable()
             status = "enabled"
         else:
             coordinator.question_rewriter.disable()
             status = "disabled"
-        
+
         logger.info(f"问题重写功能已{status}")
-        
+
         return {
             "message": f"问题重写功能已{('启用' if coordinator.rewrite_enabled else '禁用')}",
             "rewrite_enabled": coordinator.rewrite_enabled
         }
     except Exception as e:
         logger.error(f"切换问题重写状态失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"切换问题重写状态失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"切换问题重写状态失败: {str(e)}") from e
 
 
 @router.post("/rewrite/test")
@@ -106,7 +107,7 @@ async def test_rewrite(question: str = Query(..., min_length=1, max_length=500))
     """测试问题重写功能"""
     try:
         rewritten = await coordinator.question_rewriter.rewrite(question)
-        
+
         return {
             "original": question,
             "rewritten": rewritten,
@@ -114,4 +115,4 @@ async def test_rewrite(question: str = Query(..., min_length=1, max_length=500))
         }
     except Exception as e:
         logger.error(f"测试问题重写失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"测试问题重写失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"测试问题重写失败: {str(e)}") from e

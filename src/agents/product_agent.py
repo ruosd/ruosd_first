@@ -1,26 +1,28 @@
-from typing import List, Optional, Dict
 import time
+
 from langchain_core.language_models.chat_models import BaseChatModel
-from .base_agent import BaseAgent
+
 from ..services.product_service import ProductService
 from ..utils.logger import get_logger
+from .base_agent import BaseAgent
+
 
 class ProductAgent(BaseAgent):
     """
     产品Agent - 处理产品相关的所有查询
-    
+
     负责：
     - 查询产品详细信息
     - 推荐相关产品
     - 回答产品技术问题
     - 查询库存状态
     """
-    
+
     def __init__(self, llm: BaseChatModel, product_service: ProductService):
         super().__init__(llm, "product_agent")
         self.product_service = product_service
         self.logger = get_logger("product_agent")
-    
+
     def get_system_prompt(self) -> str:
         return """
 你是一位专业的产品咨询专员，负责处理用户的产品相关查询。
@@ -52,33 +54,33 @@ class ProductAgent(BaseAgent):
 - 规格参数
 - 售后服务
 """
-    
+
     async def run(
         self,
         user_query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None
+        conversation_history: list[dict[str, str]] | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None
     ) -> str:
         start_time = time.time()
-        self.logger.info(f"开始处理产品查询...")
+        self.logger.info("开始处理产品查询...")
         self.logger.info(f"用户查询: {user_query[:30]}..." if len(user_query) > 30 else f"用户查询: {user_query}")
-        
+
         # 提取产品信息
         self.logger.info("提取产品信息...")
         product_info = await self._extract_product_info(user_query)
-        
+
         if product_info:
             self.logger.info(f"检测到产品: {product_info['product_name']}")
             self.logger.info("查询产品详情...")
-            
+
             # 查询产品详情
             product_details = await self.product_service.get_product_details(product_info["product_name"])
-            
+
             if product_details:
-                self.logger.info(f"产品详情查询成功")
+                self.logger.info("产品详情查询成功")
                 product_context = f"\n产品详情：\n{product_details}"
-                self.logger.info(f"准备构建消息...")
+                self.logger.info("准备构建消息...")
             else:
                 # 产品不存在，直接返回错误信息
                 self.logger.info(f"产品不存在: {product_info['product_name']}")
@@ -86,7 +88,7 @@ class ProductAgent(BaseAgent):
         else:
             self.logger.info("未检测到产品关键词，使用通用回复")
             product_context = ""
-        
+
         # 检索记忆上下文
         self.logger.info("检索记忆上下文...")
         memory_context = await self.recall_context(
@@ -94,27 +96,27 @@ class ProductAgent(BaseAgent):
             user_id=user_id,
             session_id=session_id
         )
-        
+
         # 构建消息
         self.logger.info("构建消息列表...")
         messages = self.build_messages(user_query, conversation_history, memory_context)
-        
+
         if product_context:
             # 将产品详情添加到用户消息中
             messages[-1].content += product_context
             self.logger.info("已将产品详情添加到消息中")
-        
+
         self.logger.info(f"消息数量: {len(messages)}")
-        
+
         # 调用LLM生成响应
         self.logger.info("调用LLM生成响应...")
         llm_start = time.time()
         response = await self.llm.agenerate([messages])
         llm_time = (time.time() - llm_start) * 1000
-        
+
         result = response.generations[0][0].text
         total_time = (time.time() - start_time) * 1000
-        
+
         # 保存交互到记忆系统
         self.logger.info("保存交互到记忆系统...")
         await self.save_interaction(
@@ -124,24 +126,24 @@ class ProductAgent(BaseAgent):
             session_id=session_id,
             metadata={"product_name": product_info["product_name"] if product_info else None}
         )
-        
+
         self.logger.info(f"LLM调用完成，耗时: {llm_time:.2f}ms")
         self.logger.info(f"响应长度: {len(result)} 字符")
         self.logger.info(f"处理完成，总耗时: {total_time:.2f}ms")
-        
+
         return result
-    
-    async def _extract_product_info(self, user_query: str) -> Optional[Dict[str, str]]:
+
+    async def _extract_product_info(self, user_query: str) -> dict[str, str] | None:
         """从用户查询中提取产品信息"""
         import re
         self.logger.info("开始提取产品关键词...")
-        
+
         # 尝试匹配品牌产品名（如：苹果16、华为Mate60、小米14）
         # 匹配以品牌关键词开头的产品名
         brand_patterns = [
             r'((?:苹果|华为|小米|三星|OPPO|VIVO|荣耀|一加|红米|iPhone|iphone|索尼|联想|戴尔|惠普|华硕|微软)[\u4e00-\u9fa5a-zA-Z0-9]{0,30})',
         ]
-        
+
         for pattern in brand_patterns:
             match = re.search(pattern, user_query)
             if match:
@@ -149,18 +151,18 @@ class ProductAgent(BaseAgent):
                 if len(product_name) >= 2:  # 至少2个字符
                     self.logger.info(f"匹配到品牌产品名: {product_name}")
                     return {"product_name": product_name}
-        
+
         # 常见产品类型关键词
         product_keywords = [
             "手机", "电脑", "笔记本", "平板", "耳机", "手表", "手环",
             "充电器", "数据线", "键盘", "鼠标", "音响", "相机",
             "摄像机", "游戏机", "路由器", "移动硬盘", "U盘", "内存条"
         ]
-        
+
         for keyword in product_keywords:
             if keyword in user_query:
                 self.logger.info(f"匹配到产品关键词: {keyword}")
                 return {"product_name": keyword}
-        
+
         self.logger.info("未匹配到产品关键词")
         return None

@@ -1,26 +1,28 @@
-from typing import List, Optional, Dict
 import time
+
 from langchain_core.language_models.chat_models import BaseChatModel
-from .base_agent import BaseAgent
+
 from ..services.order_service import OrderService
 from ..utils.logger import get_logger
+from .base_agent import BaseAgent
+
 
 class OrderAgent(BaseAgent):
     """
     订单Agent - 处理订单相关的所有查询
-    
+
     负责：
     - 查询订单状态
     - 查询物流信息
     - 处理订单修改请求
     - 处理退款申请
     """
-    
+
     def __init__(self, llm: BaseChatModel, order_service: OrderService):
         super().__init__(llm, "order_agent")
         self.order_service = order_service
         self.logger = get_logger("order_agent")
-    
+
     def get_system_prompt(self) -> str:
         return """
 你是一位专业的订单处理专员，负责处理用户的订单相关查询。
@@ -51,33 +53,33 @@ class OrderAgent(BaseAgent):
 - 已完成：订单已签收
 - 已取消：订单已取消
 """
-    
+
     async def run(
         self,
         user_query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None
+        conversation_history: list[dict[str, str]] | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None
     ) -> str:
         start_time = time.time()
-        self.logger.info(f"开始处理订单查询...")
+        self.logger.info("开始处理订单查询...")
         self.logger.info(f"用户查询: {user_query[:30]}..." if len(user_query) > 30 else f"用户查询: {user_query}")
-        
+
         # 提取订单信息
         self.logger.info("提取订单信息...")
         order_info = await self._extract_order_info(user_query)
-        
+
         if order_info:
             self.logger.info(f"检测到订单号: {order_info['order_id']}")
             self.logger.info("查询订单详情...")
-            
+
             # 查询订单详情
             order_details = await self.order_service.get_order_details(order_info["order_id"])
-            
+
             if order_details:
-                self.logger.info(f"订单详情查询成功")
+                self.logger.info("订单详情查询成功")
                 order_context = f"\n订单详情：\n{order_details}"
-                self.logger.info(f"准备构建消息...")
+                self.logger.info("准备构建消息...")
             else:
                 # 订单不存在，直接返回错误信息
                 self.logger.info(f"订单不存在: {order_info['order_id']}")
@@ -85,7 +87,7 @@ class OrderAgent(BaseAgent):
         else:
             self.logger.info("未检测到订单号，使用通用回复")
             order_context = ""
-        
+
         # 检索记忆上下文
         self.logger.info("检索记忆上下文...")
         memory_context = await self.recall_context(
@@ -93,27 +95,27 @@ class OrderAgent(BaseAgent):
             user_id=user_id,
             session_id=session_id
         )
-        
+
         # 构建消息
         self.logger.info("构建消息列表...")
         messages = self.build_messages(user_query, conversation_history, memory_context)
-        
+
         if order_context:
             # 将订单详情添加到用户消息中
             messages[-1].content += order_context
             self.logger.info("已将订单详情添加到消息中")
-        
+
         self.logger.info(f"消息数量: {len(messages)}")
-        
+
         # 调用LLM生成响应
         self.logger.info("调用LLM生成响应...")
         llm_start = time.time()
         response = await self.llm.agenerate([messages])
         llm_time = (time.time() - llm_start) * 1000
-        
+
         result = response.generations[0][0].text
         total_time = (time.time() - start_time) * 1000
-        
+
         # 保存交互到记忆系统
         self.logger.info("保存交互到记忆系统...")
         await self.save_interaction(
@@ -123,18 +125,18 @@ class OrderAgent(BaseAgent):
             session_id=session_id,
             metadata={"order_id": order_info["order_id"] if order_info else None}
         )
-        
+
         self.logger.info(f"LLM调用完成，耗时: {llm_time:.2f}ms")
         self.logger.info(f"响应长度: {len(result)} 字符")
         self.logger.info(f"处理完成，总耗时: {total_time:.2f}ms")
-        
+
         return result
-    
-    async def _extract_order_info(self, user_query: str) -> Optional[Dict[str, str]]:
+
+    async def _extract_order_info(self, user_query: str) -> dict[str, str] | None:
         """从用户查询中提取订单信息"""
         import re
         self.logger.info("开始提取订单号...")
-        
+
         # 匹配多种订单号格式
         patterns = [
             r'订单号[：:]?\s*([A-Za-z0-9]{4,20})',  # 订单号 + 数字
@@ -144,7 +146,7 @@ class OrderAgent(BaseAgent):
             r'^\s*([A-Za-z0-9]{4,20})\s*$',           # 纯订单号（单独一行）
             r'(\b[A-Za-z0-9]{8,20}\b)',               # 独立的8-20位字母数字串
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, user_query)
             if match:
@@ -153,6 +155,6 @@ class OrderAgent(BaseAgent):
                 if len(order_id) >= 4:
                     self.logger.info(f"提取到订单号: {order_id}")
                     return {"order_id": order_id}
-        
+
         self.logger.info("未匹配到订单号")
         return None

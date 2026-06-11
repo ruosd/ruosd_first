@@ -2,21 +2,21 @@
 用户路由 - 处理用户注册、登录等功能
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+import hashlib
 from datetime import datetime, timedelta
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-import jwt
-from src.services import get_user_service
+
 from src.models.user import User
+from src.services import get_user_service
 from src.utils.logger import get_logger
-from src.utils.password import hash_password, verify_password
-from src.utils.settings import settings
 from src.utils.redis_client import get_redis_client
-import hashlib
+from src.utils.settings import settings
 
 logger = get_logger("user_router")
 
@@ -42,9 +42,9 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=32, description="用户名")
     email: str = Field(..., min_length=5, max_length=128, description="邮箱")
     password: str = Field(..., min_length=6, max_length=128, description="密码（最少6位）")
-    nickname: Optional[str] = Field("", max_length=64, description="昵称")
-    phone: Optional[str] = Field("", max_length=20, description="手机号")
-    role: Optional[str] = Field("user", max_length=16, description="角色")
+    nickname: str | None = Field("", max_length=64, description="昵称")
+    phone: str | None = Field("", max_length=20, description="手机号")
+    role: str | None = Field("user", max_length=16, description="角色")
 
 class LoginRequest(BaseModel):
     """登录请求"""
@@ -58,9 +58,9 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     """更新用户请求"""
-    nickname: Optional[str] = Field(None, max_length=64, description="昵称")
-    phone: Optional[str] = Field(None, max_length=20, description="手机号")
-    avatar: Optional[str] = Field(None, max_length=256, description="头像URL")
+    nickname: str | None = Field(None, max_length=64, description="昵称")
+    phone: str | None = Field(None, max_length=20, description="手机号")
+    avatar: str | None = Field(None, max_length=256, description="头像URL")
 
 class RefreshRequest(BaseModel):
     """刷新令牌请求"""
@@ -68,9 +68,9 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     """登出请求（可选的 refresh_token 用于同时销毁）"""
-    refresh_token: Optional[str] = Field(None, description="刷新令牌，提供后会同时销毁")
+    refresh_token: str | None = Field(None, description="刷新令牌，提供后会同时销毁")
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """创建JWT访问令牌"""
     to_encode = data.copy()
     to_encode["type"] = "access"
@@ -139,30 +139,30 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
         return user
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="令牌无效")
+        raise HTTPException(status_code=401, detail="令牌无效") from None
 
 @router.post("/register", summary="用户注册")
 @limiter.limit("5/minute")
 async def register(request: Request, body: RegisterRequest):
     """
     用户注册接口
-    
+
     Args:
         request: 注册请求，包含用户名、邮箱、密码等信息
-        
+
     Returns:
         注册结果和用户信息
     """
     try:
         user_service = get_user_service()
-        
+
         # 验证参数
         if len(body.username) < 3 or len(body.username) > 50:
             raise HTTPException(status_code=400, detail="用户名长度必须在3-50个字符之间")
-        
+
         if len(body.password) < 6:
             raise HTTPException(status_code=400, detail="密码长度至少6位")
-        
+
         # 注册用户
         user, error_message = user_service.register_user(
             username=body.username,
@@ -172,10 +172,10 @@ async def register(request: Request, body: RegisterRequest):
             phone=body.phone,
             role=body.role
         )
-        
+
         if not user:
             raise HTTPException(status_code=400, detail=error_message or "注册失败")
-        
+
         # 生成访问令牌和刷新令牌
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         token_data = {"user_id": user.id, "username": user.username, "role": user.role}
@@ -197,34 +197,34 @@ async def register(request: Request, body: RegisterRequest):
             "access_token": access_token,
             "refresh_token": refresh_token
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"注册失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.post("/login", summary="用户登录")
 @limiter.limit("5/minute")
 async def login(request: Request, body: LoginRequest):
     """
     用户登录接口（支持普通用户和管理员）
-    
+
     Args:
         request: 登录请求，包含用户名/邮箱和密码
-        
+
     Returns:
         登录结果、用户信息和访问令牌
     """
     try:
         user_service = get_user_service()
-        
+
         # 登录验证
         user = user_service.login_user(body.username_or_email, body.password)
-        
+
         if not user:
             raise HTTPException(status_code=401, detail="用户名/邮箱或密码错误")
-        
+
         # 生成访问令牌和刷新令牌
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         token_data = {"user_id": user.id, "username": user.username, "role": user.role}
@@ -251,33 +251,33 @@ async def login(request: Request, body: LoginRequest):
         raise
     except Exception as e:
         logger.error(f"登录失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.post("/login/admin", summary="管理员登录")
 @limiter.limit("5/minute")
 async def admin_login(request: Request, body: LoginRequest):
     """
     管理员登录接口（仅限管理员角色）
-    
+
     Args:
         request: 登录请求，包含用户名/邮箱和密码
-        
+
     Returns:
         登录结果、用户信息和访问令牌
     """
     try:
         user_service = get_user_service()
-        
+
         # 登录验证
         user = user_service.login_user(body.username_or_email, body.password)
-        
+
         if not user:
             raise HTTPException(status_code=401, detail="用户名/邮箱或密码错误")
-        
+
         # 验证管理员角色
         if not user.is_admin():
             raise HTTPException(status_code=403, detail="权限不足，需要管理员权限")
-        
+
         # 生成访问令牌和刷新令牌
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         token_data = {"user_id": user.id, "username": user.username, "role": user.role}
@@ -299,18 +299,18 @@ async def admin_login(request: Request, body: LoginRequest):
             "access_token": access_token,
             "refresh_token": refresh_token
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"管理员登录失败: {e}")
-        raise HTTPException(status_code=500, detail=f"登录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"登录失败: {str(e)}") from e
 
 @router.get("/user/me", summary="获取当前用户信息")
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """
     获取当前登录用户的详细信息
-    
+
     Returns:
         当前用户信息
     """
@@ -337,16 +337,16 @@ async def update_current_user(
 ):
     """
     更新当前登录用户的信息
-    
+
     Args:
         request: 更新请求，包含昵称、手机号、头像等
-        
+
     Returns:
         更新结果
     """
     try:
         user_service = get_user_service()
-        
+
         update_data = {}
         if request.nickname is not None:
             update_data["nickname"] = request.nickname
@@ -354,12 +354,12 @@ async def update_current_user(
             update_data["phone"] = request.phone
         if request.avatar is not None:
             update_data["avatar"] = request.avatar
-        
+
         if not update_data:
             raise HTTPException(status_code=400, detail="没有需要更新的信息")
-        
+
         success = user_service.update_user(current_user.id, **update_data)
-        
+
         if success:
             return {
                 "status": "success",
@@ -367,12 +367,12 @@ async def update_current_user(
             }
         else:
             raise HTTPException(status_code=500, detail="更新失败")
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"更新用户信息失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.put("/user/me/password", summary="修改当前用户密码")
 async def change_password(
@@ -381,16 +381,16 @@ async def change_password(
 ):
     """
     修改当前登录用户的密码
-    
+
     Args:
         request: 修改密码请求，包含旧密码和新密码
-        
+
     Returns:
         修改结果
     """
     try:
         user_service = get_user_service()
-        
+
         if len(request.new_password) < 6:
             raise HTTPException(status_code=400, detail="新密码长度至少6位")
 
@@ -399,7 +399,7 @@ async def change_password(
             old_password=request.old_password,
             new_password=request.new_password
         )
-        
+
         if success:
             return {
                 "status": "success",
@@ -407,21 +407,21 @@ async def change_password(
             }
         else:
             raise HTTPException(status_code=400, detail="旧密码不正确")
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"修改密码失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.get("/users", summary="获取用户列表", dependencies=[Depends(get_current_user)])
-async def get_users(role: Optional[str] = None, current_user: User = Depends(get_current_user)):
+async def get_users(role: str | None = None, current_user: User = Depends(get_current_user)):
     """
     获取用户列表（管理员权限）
-    
+
     Args:
         role: 用户角色过滤
-        
+
     Returns:
         用户列表
     """
@@ -429,10 +429,10 @@ async def get_users(role: Optional[str] = None, current_user: User = Depends(get
         # 验证管理员权限
         if not current_user.is_admin():
             raise HTTPException(status_code=403, detail="权限不足，需要管理员权限")
-        
+
         user_service = get_user_service()
         users = user_service.get_all_users(role)
-        
+
         user_list = []
         for user in users:
             user_list.append({
@@ -446,27 +446,27 @@ async def get_users(role: Optional[str] = None, current_user: User = Depends(get
                 "created_at": user.created_at,
                 "updated_at": user.updated_at
             })
-        
+
         return {
             "status": "success",
             "users": user_list,
             "total": len(user_list)
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"获取用户列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.get("/users/{user_id}", summary="获取用户详情", dependencies=[Depends(get_current_user)])
 async def get_user_detail(user_id: int, current_user: User = Depends(get_current_user)):
     """
     获取指定用户的详细信息（管理员权限）
-    
+
     Args:
         user_id: 用户ID
-        
+
     Returns:
         用户详细信息
     """
@@ -474,13 +474,13 @@ async def get_user_detail(user_id: int, current_user: User = Depends(get_current
         # 验证管理员权限或自己查看自己
         if not current_user.is_admin() and current_user.id != user_id:
             raise HTTPException(status_code=403, detail="权限不足")
-        
+
         user_service = get_user_service()
         user = user_service.get_user_by_id(user_id)
-        
+
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
-        
+
         return {
             "status": "success",
             "user": {
@@ -496,21 +496,21 @@ async def get_user_detail(user_id: int, current_user: User = Depends(get_current
                 "updated_at": user.updated_at
             }
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"获取用户详情失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.delete("/users/{user_id}", summary="删除用户", dependencies=[Depends(get_current_user)])
 async def delete_user(user_id: int, current_user: User = Depends(get_current_user)):
     """
     删除用户（管理员权限）
-    
+
     Args:
         user_id: 用户ID
-        
+
     Returns:
         删除结果
     """
@@ -518,14 +518,14 @@ async def delete_user(user_id: int, current_user: User = Depends(get_current_use
         # 验证管理员权限
         if not current_user.is_admin():
             raise HTTPException(status_code=403, detail="权限不足，需要管理员权限")
-        
+
         # 不能删除自己
         if current_user.id == user_id:
             raise HTTPException(status_code=400, detail="不能删除自己")
-        
+
         user_service = get_user_service()
         success = user_service.delete_user(user_id)
-        
+
         if success:
             return {
                 "status": "success",
@@ -533,12 +533,12 @@ async def delete_user(user_id: int, current_user: User = Depends(get_current_use
             }
         else:
             raise HTTPException(status_code=404, detail="用户不存在")
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"删除用户失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.post("/refresh", summary="刷新访问令牌")
 @limiter.limit("10/minute")
@@ -577,14 +577,14 @@ async def refresh_token(request: Request, body: RefreshRequest):
         }
 
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="刷新令牌已过期，请重新登录")
+        raise HTTPException(status_code=401, detail="刷新令牌已过期，请重新登录") from None
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="刷新令牌无效")
+        raise HTTPException(status_code=401, detail="刷新令牌无效") from None
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"刷新令牌失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @router.post("/logout", summary="用户登出")
 @limiter.limit("10/minute")
@@ -611,7 +611,7 @@ async def logout(request: LogoutRequest = LogoutRequest(), credentials: HTTPAuth
             "message": "登出成功"
         }
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="令牌无效")
+        raise HTTPException(status_code=401, detail="令牌无效") from None
     except Exception as e:
         logger.error(f"登出失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

@@ -5,12 +5,18 @@ LLM服务模块 - 提供统一的LLM调用接口
 内置指数退避重试机制，应对网络抖动等临时性故障。
 """
 
-from typing import Optional, List
 import time
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from openai import APIError, APITimeoutError, APIConnectionError
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from openai import APIConnectionError, APIError, APITimeoutError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from ..utils.logger import get_logger
 from ..utils.settings import settings
 
@@ -60,7 +66,7 @@ class LLMService:
         prompt: str,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-        stop_tokens: Optional[List[str]] = None
+        stop_tokens: list[str] | None = None
     ) -> str:
         """
         生成文本响应
@@ -109,7 +115,7 @@ class LLMService:
     )
     async def chat(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int = 1024,
         temperature: float = 0.7
     ) -> str:

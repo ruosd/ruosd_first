@@ -4,15 +4,15 @@ Graph 协调器 — 统一对话协调入口
 合并原 AgentCoordinator（问题重写、Agent转接）和原 GraphCoordinator（LangGraph 路由）。
 """
 
-from typing import Optional, List, Dict, AsyncGenerator
-import re
-from .agent_graph import build_agent_graph, SYSTEM_PROMPTS
-from .tools import ORDER_TOOLS, PRODUCT_TOOLS, SERVICE_TOOLS
-from .state import AgentState
+from collections.abc import AsyncGenerator
+
 from ..services.agent_manager import AgentManager
-from ..services.question_rewriter import QuestionRewriter
 from ..services.llm_service import LLMService
+from ..services.question_rewriter import QuestionRewriter
 from ..utils.logger import get_logger
+from .agent_graph import SYSTEM_PROMPTS, build_agent_graph
+from .state import AgentState
+from .tools import ORDER_TOOLS, PRODUCT_TOOLS, SERVICE_TOOLS
 
 logger = get_logger("graph_coordinator")
 
@@ -67,11 +67,11 @@ class GraphCoordinator:
     async def route_query(
         self,
         user_query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        current_agent: Optional[str] = None,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-    ) -> Dict:
+        conversation_history: list[dict[str, str]] | None = None,
+        current_agent: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> dict:
         """
         路由用户查询到合适的 Agent 并获取回复
 
@@ -148,10 +148,10 @@ class GraphCoordinator:
     async def route_query_stream(
         self,
         user_query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        current_agent: Optional[str] = None,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        conversation_history: list[dict[str, str]] | None = None,
+        current_agent: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         流式路由 — 逐 token 输出
@@ -161,7 +161,8 @@ class GraphCoordinator:
         """
         self._ensure_llm()
 
-        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
         from .intent_router import create_intent_classifier
 
         # 意图识别
@@ -221,7 +222,7 @@ class GraphCoordinator:
         yield "抱歉，处理您的请求时遇到了问题。"
         yield f"[END]|{agent_name}|{session_id or ''}"
 
-    def _check_transfer_request(self, user_query: str) -> Optional[str]:
+    def _check_transfer_request(self, user_query: str) -> str | None:
         """检测用户是否主动要求转接"""
         if not any(kw in user_query for kw in self.TRANSFER_KEYWORDS):
             return None
@@ -231,12 +232,11 @@ class GraphCoordinator:
             "customer_service_agent": ["客服", "人工", "投诉"],
         }
         for agent_name, keywords in agent_keywords.items():
-            if any(kw in user_query for kw in keywords):
-                if self.agent_manager.has_agent(agent_name):
+            if any(kw in user_query for kw in keywords) and self.agent_manager.has_agent(agent_name):
                     return agent_name
         return None
 
-    async def _transfer_memory(self, from_agent: str, to_agent: str, session_id: str, user_id: Optional[str]):
+    async def _transfer_memory(self, from_agent: str, to_agent: str, session_id: str, user_id: str | None):
         """Agent 转接时传递记忆"""
         try:
             from ..services.memory_service import get_memory_service
@@ -253,6 +253,6 @@ class GraphCoordinator:
         response = await agent.run(user_query, history, user_id, session_id)
         return {"response": response, "agent": agent_name}
 
-    def get_available_agents(self) -> List[str]:
+    def get_available_agents(self) -> list[str]:
         """获取所有可用的 Agent 名称"""
         return list(self.agent_manager.agents.keys())

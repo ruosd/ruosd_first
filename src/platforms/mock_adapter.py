@@ -5,7 +5,8 @@ Mock 平台适配器 — 包装自有数据库（当前默认数据源）
 后续接入淘宝时，只需替换为 TaobaoAdapter，Service 层代码不变。
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from .base import PlatformAdapter
 
 
@@ -37,20 +38,20 @@ class MockAdapter(PlatformAdapter):
 
     # ── 订单 ──
 
-    async def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_order(self, order_id: str) -> dict[str, Any] | None:
         svc = self._get_order_service()
         result = await svc.get_order_details(order_id)
         if result:
             return {"order_id": order_id, "detail": result}
         return None
 
-    async def get_user_orders(self, user_id: str) -> List[Dict[str, Any]]:
+    async def get_user_orders(self, user_id: str) -> list[dict[str, Any]]:
         return await self._get_order_service().get_user_orders(user_id)
 
-    async def search_orders(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_orders(self, keyword: str) -> list[dict[str, Any]]:
         return await self._get_order_service().search_orders(keyword)
 
-    async def get_shipping_info(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_shipping_info(self, order_id: str) -> dict[str, Any] | None:
         result = await self._get_order_service().get_order_details(order_id)
         if result:
             return {"order_id": order_id, "shipping": result}
@@ -61,13 +62,13 @@ class MockAdapter(PlatformAdapter):
 
     # ── 产品 ──
 
-    async def search_products(self, keyword: str) -> List[Dict[str, Any]]:
+    async def search_products(self, keyword: str) -> list[dict[str, Any]]:
         return await self._get_product_service().search_products(keyword)
 
-    async def get_product(self, product_id: str) -> Optional[Dict[str, Any]]:
+    async def get_product(self, product_id: str) -> dict[str, Any] | None:
         return await self._get_product_service().get_product_details(product_id)
 
-    async def recommend_products(self, preference: str) -> List[Dict[str, Any]]:
+    async def recommend_products(self, preference: str) -> list[dict[str, Any]]:
         # Mock 适配器：简单用 preference 做关键词搜索
         return await self._get_product_service().search_products(preference)
 

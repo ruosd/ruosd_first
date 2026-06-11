@@ -1,6 +1,5 @@
-import uuid
-from typing import Optional, Dict, Any
 from datetime import datetime
+
 from src.models.user import User
 from src.utils import get_mysql_client
 from src.utils.logger import get_logger
@@ -28,7 +27,7 @@ def parse_datetime(date_str):
                 return None
 
 
-def _row_to_user(row: Dict) -> User:
+def _row_to_user(row: dict) -> User:
     """将数据库行转换为 User 对象"""
     return User(
         id=row["id"],
@@ -96,7 +95,7 @@ class UserService:
         nickname: str = "",
         phone: str = "",
         role: str = "user",
-    ) -> tuple[Optional[User], Optional[str]]:
+    ) -> tuple[User | None, str | None]:
         """注册新用户"""
         if not self._ensure_mysql():
             return None, "数据库不可用"
@@ -142,7 +141,7 @@ class UserService:
             logger.error(f"用户注册失败: {e}", exc_info=True)
             return None, "注册失败"
 
-    def login_user(self, username_or_email: str, password: str) -> Optional[User]:
+    def login_user(self, username_or_email: str, password: str) -> User | None:
         """用户登录"""
         if not self._ensure_mysql():
             return None
@@ -171,7 +170,7 @@ class UserService:
             logger.error(f"用户登录失败: {e}", exc_info=True)
             return None
 
-    def get_user_by_id(self, user_id: int) -> Optional[User]:
+    def get_user_by_id(self, user_id: int) -> User | None:
         """通过ID获取用户"""
         try:
             rows = self.mysql.execute_query(
@@ -187,7 +186,7 @@ class UserService:
             logger.error(f"获取用户失败(id={user_id}): {e}", exc_info=True)
             return None
 
-    def get_user_by_username(self, username: str) -> Optional[User]:
+    def get_user_by_username(self, username: str) -> User | None:
         """通过用户名获取用户"""
         try:
             rows = self.mysql.execute_query(
@@ -203,7 +202,7 @@ class UserService:
             logger.error(f"获取用户失败(username={username}): {e}", exc_info=True)
             return None
 
-    def get_user_by_email(self, email: str) -> Optional[User]:
+    def get_user_by_email(self, email: str) -> User | None:
         """通过邮箱获取用户"""
         try:
             rows = self.mysql.execute_query(
@@ -274,7 +273,7 @@ class UserService:
             logger.error(f"删除用户失败: {e}", exc_info=True)
             return False
 
-    def get_all_users(self, role: Optional[str] = None) -> list[User]:
+    def get_all_users(self, role: str | None = None) -> list[User]:
         """获取所有用户"""
         try:
             if role:
